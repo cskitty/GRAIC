@@ -262,7 +262,7 @@ class VehicleController():
 
         # TODO: add this to state
         delta_yaw = np.arcsin(np.cross(w, np.array(np.array([np.cos(yaw), np.sin(yaw)]))))   
-        state = np.array([lateral_dis, -delta_yaw, speed, np.float(obs_front), np.float(obs_left), np.float(obs_right)], dtype=object)
+        state = np.array([lateral_dis, -delta_yaw, speed, obs_front, obs_left, obs_right])
 
         return state, lspeed_lon
 
@@ -324,10 +324,16 @@ def run_model(role_name, controller):
         newAckermannCmd.steering_angle = 0
         controlPub.publish(newAckermannCmd)
 
-    def random_act():
-        action = np.random.uniform(-1.0, 1.0, size=2)
+    def generate_control(action):
         acc = action[0]*5
         steer = action[1]
+        
+        #TODO:remove me
+        if acc < - 2.5:
+            reverse = True
+        else:
+            reverse = False
+
         # Convert acceleration to throttle and brake
         if acc > 0:
             throttle = np.clip(acc / 3, 0, 1)
@@ -335,7 +341,7 @@ def run_model(role_name, controller):
         else:
             throttle = 0
             brake = np.clip(-acc / 8, 0, 1)
-        act = CarlaEgoVehicleControl(throttle=float(throttle), steer=float(-steer), brake=float(brake))
+        act = CarlaEgoVehicleControl(throttle=float(throttle), steer=float(-steer), brake=float(brake), reverse=reverse)
         return act
 
     rospy.on_shutdown(shut_down)
@@ -355,8 +361,8 @@ def run_model(role_name, controller):
 
     rate = rospy.Rate(20)  # 100 Hz 
     step = 0
-    prev_state = np.array([np.float(0),np.float(0),np.float(0),np.float(0),np.float(0),np.float(0)], dtype=object)
-    random_step = 1000
+    prev_state = np.array([0,0,0,0,0,0])
+    random_step = 3 
     action = [0, 0]
 
     while not rospy.is_shutdown():
@@ -375,9 +381,9 @@ def run_model(role_name, controller):
             print("REWARD:", reward)
 
             if step < random_step:
-                act = random_act()
+                action  = np.random.uniform(-1.0, 1.0, size=2)
             else:
-                act = agent.select_action(state, False)
+                action = agent.select_action(state, False)
 
             done = False
 
@@ -392,7 +398,10 @@ def run_model(role_name, controller):
             #input("press...")
 
             perceptionModule.clear()
-            controlPub3.publish(act)
+
+            cntl = generate_control(action)
+            controlPub3.publish(cntl)
+
             prev_state = copy.deepcopy(state)
         rate.sleep()
 
